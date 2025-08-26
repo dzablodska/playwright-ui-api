@@ -1,0 +1,95 @@
+name: Playwright CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ui:
+    name: UI (Chrome)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run UI tests (chromium project)
+        env:
+          UI_BASE_URL: https://www.saucedemo.com
+          SAUCE_USER: standard_user
+          SAUCE_PASS: secret_sauce
+        run: npx playwright test --project=chromium
+
+      - name: Upload UI report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-ui
+          path: playwright-report
+          retention-days: 7
+
+  api:
+    name: API (ReqRes)
+    runs-on: ubuntu-latest
+    env:
+      REQRES_BASE: https://reqres.in
+      REQRES_API_KEY: ${{ secrets.REQRES_API_KEY }}
+      REQRES_USER: ${{ secrets.REQRES_USER }}
+      REQRES_PASS: ${{ secrets.REQRES_PASS }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run API tests (api project)
+        run: npx playwright test --project=api
+
+      - name: Verify Allure results exist
+        if: always()
+        run: |
+          echo "Listing allure-results:"
+          ls -la allure-results || true
+          test -d allure-results && [ "$(ls -A allure-results | wc -l)" -gt 0 ] || (echo "❌ No Allure results found. Ensure allure reporter is enabled and tests ran." && exit 1)
+
+      - name: Generate Allure report (single-file)
+        if: always()
+        run: npx allure generate allure-results -o allure-report --clean --single-file
+
+      - name: Upload Allure report (API)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: allure-report
+          retention-days: 7
+
+      - name: Upload Playwright HTML report (API)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-api
+          path: playwright-report
+          retention-days: 7
